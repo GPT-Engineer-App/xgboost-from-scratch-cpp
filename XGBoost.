@@ -1,0 +1,141 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <algorithm>
+
+using namespace std;
+
+struct TreeNode {
+    double value;
+    int feature_index;
+    double threshold;
+    TreeNode* left;
+    TreeNode* right;
+
+    TreeNode(double val) : value(val), feature_index(-1), threshold(0.0), left(nullptr), right(nullptr) {}
+};
+
+class DecisionTree {
+public:
+    DecisionTree(int max_depth) : max_depth(max_depth) {}
+
+    void fit(const vector<vector<double>>& X, const vector<double>& y) {
+        root = build_tree(X, y, 0);
+    }
+
+    double predict(const vector<double>& x) {
+        return predict_recursive(root, x);
+    }
+
+private:
+    TreeNode* root;
+    int max_depth;
+
+    TreeNode* build_tree(const vector<vector<double>>& X, const vector<double>& y, int depth) {
+        if (depth == max_depth || X.empty()) {
+            double leaf_value = calculate_leaf_value(y);
+            return new TreeNode(leaf_value);
+        }
+
+        int best_feature;
+        double best_threshold;
+        vector<vector<double>> left_X, right_X;
+        vector<double> left_y, right_y;
+
+        find_best_split(X, y, best_feature, best_threshold, left_X, right_X, left_y, right_y);
+
+        TreeNode* node = new TreeNode(0.0);
+        node->feature_index = best_feature;
+        node->threshold = best_threshold;
+        node->left = build_tree(left_X, left_y, depth + 1);
+        node->right = build_tree(right_X, right_y, depth + 1);
+
+        return node;
+    }
+
+    void find_best_split(const vector<vector<double>>& X, const vector<double>& y, int& best_feature, double& best_threshold, vector<vector<double>>& left_X, vector<vector<double>>& right_X, vector<double>& left_y, vector<double>& right_y) {
+        // Simplified split finding logic
+        best_feature = 0;
+        best_threshold = X[0][0];
+        for (size_t i = 0; i < X.size(); ++i) {
+            if (X[i][0] < best_threshold) {
+                left_X.push_back(X[i]);
+                left_y.push_back(y[i]);
+            } else {
+                right_X.push_back(X[i]);
+                right_y.push_back(y[i]);
+            }
+        }
+    }
+
+    double calculate_leaf_value(const vector<double>& y) {
+        double sum = 0.0;
+        for (double val : y) {
+            sum += val;
+        }
+        return sum / y.size();
+    }
+
+    double predict_recursive(TreeNode* node, const vector<double>& x) {
+        if (!node->left && !node->right) {
+            return node->value;
+        }
+
+        if (x[node->feature_index] < node->threshold) {
+            return predict_recursive(node->left, x);
+        } else {
+            return predict_recursive(node->right, x);
+        }
+    }
+};
+
+class XGBoost {
+public:
+    XGBoost(int n_estimators, int max_depth, double learning_rate) : n_estimators(n_estimators), max_depth(max_depth), learning_rate(learning_rate) {}
+
+    void fit(const vector<vector<double>>& X, const vector<double>& y) {
+        vector<double> residuals = y;
+        for (int i = 0; i < n_estimators; ++i) {
+            DecisionTree tree(max_depth);
+            tree.fit(X, residuals);
+            trees.push_back(tree);
+
+            vector<double> predictions = predict(X);
+            for (size_t j = 0; j < residuals.size(); ++j) {
+                residuals[j] = y[j] - predictions[j];
+            }
+        }
+    }
+
+    vector<double> predict(const vector<vector<double>>& X) {
+        vector<double> predictions(X.size(), 0.0);
+        for (const auto& tree : trees) {
+            for (size_t i = 0; i < X.size(); ++i) {
+                predictions[i] += learning_rate * tree.predict(X[i]);
+            }
+        }
+        return predictions;
+    }
+
+private:
+    int n_estimators;
+    int max_depth;
+    double learning_rate;
+    vector<DecisionTree> trees;
+};
+
+int main() {
+    vector<vector<double>> X = {{1.0}, {2.0}, {3.0}, {4.0}, {5.0}};
+    vector<double> y = {1.0, 2.0, 3.0, 4.0, 5.0};
+
+    XGBoost model(10, 3, 0.1);
+    model.fit(X, y);
+
+    vector<double> predictions = model.predict(X);
+    for (double pred : predictions) {
+        cout << pred << " ";
+    }
+    cout << endl;
+
+    return 0;
+}
